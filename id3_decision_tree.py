@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import ks_2samp
-import scipy
+import scipy, gc
 
 class node:
     def __init__(self, dataval=None):
@@ -57,12 +57,6 @@ def info_gain2(X, label):
     entropy_with_feature = np.nan_to_num(calc_entropy_with_categorical_feature(X, label))
     return entropy - entropy_with_feature
 
-def search_best_thres(X):
-    return np.median(X)
-
-def mse(X, label):
-    return np.mean((X - label)**2)
-
 def most_common(label):
     counts = pd.value_counts(label)
     indices = counts.index.tolist()
@@ -112,7 +106,6 @@ def id3(root, features, indices, label, min_leaf=10, mode="classifier", params={
                 vals_sub = vals[idx_sub]
                 label_subs.append(label_sub)
                 vals_subs.append(vals_sub)
-            
             # calculate the loss
             if params["loss"] == "ks":
                 for j in range(len(label_subs)):
@@ -121,11 +114,10 @@ def id3(root, features, indices, label, min_leaf=10, mode="classifier", params={
                         l2 = label_subs[k]
                         loss += ks_2samp(l1, l2).pvalue if (l1.shape[0] > 0 and l2.shape[0] > 0) else 1
             elif params["loss"] == "custom":
-                thres = search_best_thres(vals)
+                thres = np.median(vals)
                 loss += -info_gain_continuous(vals, label, thres)
             if loss < min_loss:
-                A = i; min_loss = loss
-                
+                A = i; min_loss = loss    
     # examine the branches
     n.feature_index = A
     A_vals = features[:,A]
@@ -154,7 +146,6 @@ def id3(root, features, indices, label, min_leaf=10, mode="classifier", params={
                 (np.min(A_vals), np.min(A_vals)),
                 (np.max(A_vals), np.max(A_vals))
             ]
-
     for vi in A_vals_range:
         idx_with_vi = np.argwhere(np.logical_and(A_vals > vi[0], A_vals <= vi[1]))[:,0] if vi[0] != vi[1] else np.argwhere(A_vals == vi[0])[:,0]
         features_with_vi = features[idx_with_vi,:]
@@ -163,10 +154,10 @@ def id3(root, features, indices, label, min_leaf=10, mode="classifier", params={
         n.branches.append(n1)
         if label_with_vi.shape[0] > min_leaf and idx_with_vi.shape[0] != label.shape[0]:
             id3(n1, features_with_vi, indices, label_with_vi, min_leaf=min_leaf, mode=mode, params=params)
+    gc.collect()
     return n
 
 def hierarchical_clustering(root, features, indices, min_leaf=10, verbose=False):
-    # traversing down the hierarchical structure that maximizes the kl-divergence
     hierarchical_clustering2(root, features, indices, min_leaf, verbose=verbose)
     # labeling the clusters
     q = [root]; leaves = []; counter = 0
@@ -195,12 +186,12 @@ def hierarchical_clustering2(root, features, indices, min_leaf=10, verbose=False
             dist = (1 / pval if pval > 0 else 1000) 
             if dist > dist_metric:
                 A = i; dist_metric = dist
-
     X = features[:,A]
     thres = np.median(features[:,A])
     n.feature_index = A
     range1 = (-np.inf, thres)
     range2 = (thres, np.inf); nodes = [node(), node()]
+    gc.collect()
     if verbose:
         print("node data:", features.shape, "feature index:", root.feature_index, "range:", root.vi)
     if sum(X > thres) >= min_leaf and sum(X > thres) != X.shape[0]:
